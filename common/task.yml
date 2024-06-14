@@ -1,0 +1,127 @@
+---
+- name: Update apt cache after adding Docker repository
+  apt:
+    update_cache: yes
+
+- name: Ensure required directories exist
+  file:
+    path: /etc/modules-load.d
+    state: directory
+
+- name: Create containerd.conf for modules
+  copy:
+    dest: /etc/modules-load.d/containerd.conf
+    content: |
+          overlay
+          br_netfilter
+
+- name: Load kernel modules
+  command: "{{ item }}"
+  with_items:
+        - modprobe overlay
+        - modprobe br_netfilter
+
+- name: Configure sysctl for Kubernetes
+  copy:
+    dest: /etc/sysctl.d/k8s.conf
+    content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+
+- name: Apply sysctl settings
+  command: sysctl --system
+
+- name: Turn off swap immediately
+  command: swapoff -a
+
+- name: Turn off swap on reboot
+  replace:
+      path: /etc/fstab
+      regexp: '^/swap.img'
+      replace: '#/swap.img'
+
+- name: Install Docker dependencies
+  apt:
+    name:
+        - ca-certificates
+        - curl
+        - gnupg
+    state: present
+    update_cache: yes
+
+- name: Add Docker's official GPG key
+  ansible.builtin.shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+
+- name: Add Docker repository
+  apt_repository:
+      repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+      state: present
+      update_cache: yes
+
+- name: Update apt cache after adding Docker repository
+  apt:
+    update_cache: yes
+
+- name: Install containerd
+  apt:
+      name: containerd.io
+      state: present
+      update_cache: yes
+
+- name: Configure containerd
+  shell: |
+        mkdir -p /etc/containerd
+        containerd config default > /etc/containerd/config.toml
+        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+
+- name: Restart containerd
+  systemd:
+        name: containerd
+        state: restarted
+
+- name: Create crictl configuration
+  copy:
+      dest: /etc/crictl.yaml
+      content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+          timeout: 2
+
+- name: Install Kubernetes packages
+  apt:
+      name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+      state: present
+      update_cache: yes
+
+- name: Add Kubernetes GPG key
+  ansible.builtin.shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | apt-key add -
+
+- name: Add Kubernetes repository
+  ansible.builtin.apt_repository:
+      repo: "deb https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
+      state: present
+
+
+- name: Update apt cache after adding Kubernetes repository
+  apt:
+      update_cache: yes
+
+- name: Install kubelet, kubeadm, and kubectl
+  apt:
+      name:
+          - kubelet
+          - kubeadm
+          - kubectl
+      state: present
+      update_cache: yes
+
+- name: Hold Kubernetes packages
+  shell: |
+        sudo apt-mark hold kubelet kubeadm kubectl

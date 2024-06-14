@@ -1,0 +1,24 @@
+---
+- name: Setup Kubernetes Cluster
+  hosts: all
+  become: yes
+  roles:
+    - common
+
+- name: Initialize Kubernetes Cluster and Configure Master Node
+  hosts: k8s_master
+  become: yes
+  roles:
+    - master
+
+- name: Join Worker Nodes to the Cluster
+  hosts: k8s_worker
+  become: yes
+  roles:
+    - worker
+
+- name: Install Calico Network Plugin
+  hosts: k8s_master
+  become: yes
+  roles:
+    - calico

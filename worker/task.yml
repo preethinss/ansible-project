@@ -1,0 +1,9 @@
+---
+- name: Check if the node has already joined the cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_config
+
+- name: Join the master node
+  ansible.builtin.command: "{{ hostvars[groups['k8s_master'][0]]['token']['stdout'] }}"
+  when: not kubelet_config.stat.exists

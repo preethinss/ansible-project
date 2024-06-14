@@ -1,0 +1,5 @@
+[k8s_master]
+13.232.66.132 ansible_user=ubuntu
+
+[k8s_worker]
+13.232.18.239 ansible_user=ubuntu
